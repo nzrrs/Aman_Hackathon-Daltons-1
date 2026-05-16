@@ -21,6 +21,7 @@ Open http://localhost:5173
 | ➕ Report | Form to submit a new outage (city, neighborhood, description) |
 | 🧪 Simulation | Starts/stops realistic live activity and controls event frequency |
 | ⏱ Timeline Replay | Scrub/play outage history with 1 day / 7 days / 14 days windows |
+| 🛡 Admin Panel | Moderation console for status changes, false/duplicate marking, editing, and deletion |
 
 ## For hackathon organizers
 
@@ -40,4 +41,10 @@ Timeline replay logic is in `src/data/replay.js`.
 - Leaflet (OpenStreetMap tiles, no API key needed)
 - date-fns (French locale)
 - No backend, no database, no auth
+
+## Admin access model (demo only)
+
+- Admin tools are behind a client-side key prompt (`admin`) and a temporary localStorage session flag.
+- This is **not secure** for production use: it can be bypassed by inspecting frontend code or browser storage.
+- It exists only to simulate restricted admin access in a frontend-only hackathon environment.
 "# aman" 

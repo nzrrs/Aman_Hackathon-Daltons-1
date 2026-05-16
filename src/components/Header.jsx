@@ -1,18 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../store.jsx';
+import AppModal from './AppModal.jsx';
 
 export default function Header() {
   const {
     view,
     setView,
     stats,
+    admin,
     simulation,
     replay,
+    authenticateAdmin,
+    logoutAdmin,
     setSimulationFrequency,
     startSimulation,
     stopSimulation,
     setReplayVisible,
   } = useStore();
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminKeyInput, setAdminKeyInput] = useState('');
+
+  const handleAdminAccess = (event) => {
+    event.preventDefault();
+    const ok = authenticateAdmin(adminKeyInput.trim());
+    if (ok) setView('admin');
+    if (ok) {
+      setShowAdminModal(false);
+      setAdminKeyInput('');
+    }
+  };
 
   return (
     <header style={{
@@ -117,6 +133,7 @@ export default function Header() {
             { id: 'map', label: '🗺 Carte' },
             { id: 'list', label: '📋 Liste' },
             { id: 'report', label: '➕ Signaler' },
+            ...(admin.isAuthenticated ? [{ id: 'admin', label: '🛡 Admin' }] : []),
           ].map(({ id, label }) => (
             <button key={id} onClick={() => setView(id)} style={{
               padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
@@ -128,8 +145,102 @@ export default function Header() {
               {label}
             </button>
           ))}
+          {!admin.isAuthenticated ? (
+            <button
+              onClick={() => setShowAdminModal(true)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border2)',
+                background: 'transparent',
+                color: 'var(--text3)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              🔐 Admin
+            </button>
+          ) : (
+            <button
+              onClick={logoutAdmin}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(245,158,11,0.35)',
+                background: 'rgba(245,158,11,0.08)',
+                color: '#f59e0b',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              🔓 Quitter Admin
+            </button>
+          )}
         </nav>
       </div>
+      <AppModal
+        open={showAdminModal}
+        onClose={() => { setShowAdminModal(false); setAdminKeyInput(''); }}
+        title="Accès administrateur"
+        description="Entrez la clé admin pour ouvrir la console de modération."
+        footer={(
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button
+              onClick={() => { setShowAdminModal(false); setAdminKeyInput(''); }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border2)',
+                background: 'transparent',
+                color: 'var(--text2)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleAdminAccess}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(0,180,216,0.4)',
+                background: 'rgba(0,180,216,0.14)',
+                color: 'var(--accent)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Déverrouiller
+            </button>
+          </div>
+        )}
+      >
+        <input
+          autoFocus
+          type="password"
+          value={adminKeyInput}
+          onChange={(event) => setAdminKeyInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') handleAdminAccess(event);
+          }}
+          placeholder="Clé admin"
+          style={{
+            width: '100%',
+            background: 'var(--bg3)',
+            border: '1px solid var(--border2)',
+            color: 'var(--text)',
+            padding: '10px 12px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontFamily: 'var(--font-body)',
+          }}
+        />
+      </AppModal>
     </header>
   );
 }

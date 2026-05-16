@@ -29,6 +29,8 @@ export const STATUS_CONFIG = {
   partial: { label: "Approvisionnement partiel", color: "#f59e0b", bg: "rgba(245,158,11,0.12)", dot: "#f59e0b" },
   resolved: { label: "Rétabli", color: "#10b981", bg: "rgba(16,185,129,0.12)", dot: "#10b981" },
   scheduled: { label: "Coupure planifiée", color: "#8b5cf6", bg: "rgba(139,92,246,0.12)", dot: "#8b5cf6" },
+  false: { label: "Faux signalement", color: "#f97316", bg: "rgba(249,115,22,0.12)", dot: "#f97316" },
+  duplicate: { label: "Doublon", color: "#14b8a6", bg: "rgba(20,184,166,0.12)", dot: "#14b8a6" },
 };
 
 export const CITY_RISK_FACTORS = {

@@ -17,14 +17,58 @@ import { buildReplayDataset, getReplaySnapshot } from "./data/replay.js";
 const StoreCtx = createContext(null);
 
 let nextId = 200;
+const ADMIN_SESSION_KEY = "aman_admin_session";
+const ADMIN_DEMO_KEY = "admin";
+const ALLOWED_VIEWS = new Set(["map", "list", "report", "admin"]);
+const VALID_REPORT_STATUSES = new Set([
+  "active",
+  "partial",
+  "resolved",
+  "scheduled",
+  "false",
+  "duplicate",
+]);
+const EDITABLE_REPORT_FIELDS = new Set([
+  "city",
+  "neighborhood",
+  "description",
+  "reportedBy",
+  "severity",
+  "status",
+  "lat",
+  "lng",
+  "estimatedRestore",
+]);
+
+function getInitialAdminAuth() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(ADMIN_SESSION_KEY) === "1";
+}
+
+function isValidReportStatus(status) {
+  return VALID_REPORT_STATUSES.has(status);
+}
+
+function sanitizeReportPatch(patch = {}) {
+  const safePatch = {};
+  Object.entries(patch).forEach(([key, value]) => {
+    if (!EDITABLE_REPORT_FIELDS.has(key)) return;
+    if (key === "status" && !isValidReportStatus(value)) return;
+    safePatch[key] = value;
+  });
+  return safePatch;
+}
 
 const initialState = {
   reports: SEED_REPORTS,
   activeReport: null,
   filter: { city: "all", status: "all" },
   showHeatmap: true,
-  view: "map", // 'map' | 'list' | 'report'
+  view: "map", // 'map' | 'list' | 'report' | 'admin'
   toast: null,
+  admin: {
+    isAuthenticated: getInitialAdminAuth(),
+  },
   simulation: {
     running: false,
     frequencySec: 8,
@@ -62,9 +106,16 @@ function computeOutageFrequency(report, reports) {
   const neighborhoodActive = reports.filter(r =>
     r.city === report.city &&
     r.neighborhood === report.neighborhood &&
-    r.status !== 'resolved'
+    !["resolved", "false", "duplicate"].includes(r.status)
   ).length;
-  const statusBoost = report.status === 'active' ? 12 : report.status === 'partial' ? 6 : 3;
+  const statusBoost =
+    report.status === "active"
+      ? 12
+      : report.status === "partial"
+        ? 6
+        : report.status === "resolved" || report.status === "false" || report.status === "duplicate"
+          ? 0
+          : 3;
   return clamp(base + neighborhoodActive * 10 + statusBoost, 10, 100);
 }
 const CITY_RISK_FACTORS = {
@@ -119,12 +170,27 @@ function computeRisk(report, reports) {
     maintenanceRisk * RISK_WEIGHTS.maintenanceActivity;
 
   const severityBoost = report.severity === 'high' ? 8 : report.severity === 'low' ? -5 : 0;
-  const statusBoost = report.status === 'active' ? 6 : report.status === 'scheduled' ? -4 : 0;
+  const statusBoost =
+    report.status === "active"
+      ? 6
+      : report.status === "scheduled"
+        ? -4
+        : report.status === "false" || report.status === "duplicate"
+          ? -8
+          : 0;
   const upvoteBoost = clamp(Math.round(report.upvotes / 10), 0, 6);
 
   const score = clamp(Math.round(weightedScore + severityBoost + statusBoost + upvoteBoost), 0, 100);
 
-  const statusMultiplier = report.status === 'active' ? 1.2 : report.status === 'partial' ? 0.9 : report.status === 'scheduled' ? 0.7 : 0.3;
+  const statusMultiplier = report.status === "active"
+    ? 1.2
+    : report.status === "partial"
+      ? 0.9
+      : report.status === "scheduled"
+        ? 0.7
+        : report.status === "false" || report.status === "duplicate"
+          ? 0.2
+          : 0.3;
   const maintenanceRelief = cityBase.maintenanceActivity / 25;
   const baseHours = 2 + score / 8;
   const recoveryHours = clamp(Math.round(baseHours * statusMultiplier - maintenanceRelief + (report.severity === 'high' ? 2 : 0)), 0, 96);
@@ -169,6 +235,7 @@ function reducer(state, action) {
       };
     }
     case "UPDATE_STATUS": {
+      if (!isValidReportStatus(action.status)) return state;
       return {
         ...state,
         reports: state.reports.map((r) =>
@@ -177,19 +244,36 @@ function reducer(state, action) {
       };
     }
     case "PATCH_REPORT": {
+      const safePatch = sanitizeReportPatch(action.patch);
+      if (Object.keys(safePatch).length === 0) return state;
       return {
         ...state,
         reports: state.reports.map((r) =>
-          r.id === action.id ? { ...r, ...action.patch } : r,
+          r.id === action.id ? { ...r, ...safePatch } : r,
         ),
       };
     }
+    case "DELETE_REPORT":
+      return {
+        ...state,
+        reports: state.reports.filter((r) => r.id !== action.id),
+        activeReport: state.activeReport === action.id ? null : state.activeReport,
+      };
     case "SET_ACTIVE":
       return { ...state, activeReport: action.id };
     case "SET_FILTER":
       return { ...state, filter: { ...state.filter, ...action.filter } };
     case "SET_VIEW":
-      return { ...state, view: action.view };
+      return { ...state, view: ALLOWED_VIEWS.has(action.view) ? action.view : state.view };
+    case "SET_ADMIN_AUTH":
+      return {
+        ...state,
+        admin: { ...state.admin, isAuthenticated: action.isAuthenticated },
+        view:
+          !action.isAuthenticated && state.view === "admin"
+            ? "map"
+            : state.view,
+      };
     case "SET_SHOW_HEATMAP":
       return { ...state, showHeatmap: action.showHeatmap };
     case "TOAST":
@@ -292,8 +376,53 @@ export function StoreProvider({ children }) {
   }, []);
 
   const setView = useCallback((view) => {
+    if (!ALLOWED_VIEWS.has(view)) return;
     dispatch({ type: "SET_VIEW", view });
   }, []);
+
+  const setReportStatus = useCallback((id, status) => {
+    if (!isValidReportStatus(status)) {
+      pushToast("❌ Statut invalide");
+      return false;
+    }
+    dispatch({ type: "UPDATE_STATUS", id, status });
+    return true;
+  }, [pushToast]);
+
+  const deleteReport = useCallback((id) => {
+    dispatch({ type: "DELETE_REPORT", id });
+  }, []);
+
+  const patchReport = useCallback((id, patch) => {
+    const safePatch = sanitizeReportPatch(patch);
+    if (Object.keys(safePatch).length === 0) {
+      pushToast("⚠️ Aucune modification valide");
+      return false;
+    }
+    dispatch({ type: "PATCH_REPORT", id, patch: safePatch });
+    return true;
+  }, [pushToast]);
+
+  const authenticateAdmin = useCallback((candidateKey) => {
+    if (candidateKey !== ADMIN_DEMO_KEY) {
+      pushToast("🔒 Clé admin invalide");
+      return false;
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ADMIN_SESSION_KEY, "1");
+    }
+    dispatch({ type: "SET_ADMIN_AUTH", isAuthenticated: true });
+    pushToast("✅ Session admin activée");
+    return true;
+  }, [pushToast]);
+
+  const logoutAdmin = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ADMIN_SESSION_KEY);
+    }
+    dispatch({ type: "SET_ADMIN_AUTH", isAuthenticated: false });
+    pushToast("🔐 Session admin fermée");
+  }, [pushToast]);
 
   const setShowHeatmap = useCallback((showHeatmap) => {
     dispatch({ type: "SET_SHOW_HEATMAP", showHeatmap });
@@ -480,6 +609,11 @@ const filteredReports = enrichedReports.filter((r) => {
       setActive,
       setFilter,
       setView,
+      setReportStatus,
+      deleteReport,
+      patchReport,
+      authenticateAdmin,
+      logoutAdmin,
       setShowHeatmap,
       setSimulationFrequency,
       startSimulation,
@@ -504,6 +638,11 @@ const filteredReports = enrichedReports.filter((r) => {
       setActive,
       setFilter,
       setView,
+      setReportStatus,
+      deleteReport,
+      patchReport,
+      authenticateAdmin,
+      logoutAdmin,
       setShowHeatmap,
       setSimulationFrequency,
       startSimulation,
