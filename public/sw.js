@@ -1,8 +1,15 @@
 const APP_SHELL_CACHE = 'aman-app-shell-v1';
 const RUNTIME_CACHE = 'aman-runtime-v1';
 const APP_SHELL_ASSETS = ['/', '/index.html', '/manifest.webmanifest'];
+const IS_LOCAL_DEV =
+  self.location.hostname === 'localhost' ||
+  self.location.hostname === '127.0.0.1';
 
 self.addEventListener('install', (event) => {
+  if (IS_LOCAL_DEV) {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   event.waitUntil(
     caches
       .open(APP_SHELL_CACHE)
@@ -12,6 +19,16 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  if (IS_LOCAL_DEV) {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .then(() => self.registration.unregister())
+        .then(() => self.clients.claim()),
+    );
+    return;
+  }
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
@@ -29,6 +46,7 @@ function isStaticAsset(request) {
 }
 
 self.addEventListener('fetch', (event) => {
+  if (IS_LOCAL_DEV) return;
   const { request } = event;
   if (request.method !== 'GET') return;
 
