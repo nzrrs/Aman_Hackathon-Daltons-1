@@ -31,6 +31,19 @@ export const STATUS_CONFIG = {
   scheduled: { label: "Coupure planifiée", color: "#8b5cf6", bg: "rgba(139,92,246,0.12)", dot: "#8b5cf6" },
 };
 
+export const CITY_RISK_FACTORS = {
+  Casablanca: { populationDensity: 88, infrastructureAge: 72, weatherStress: 63, maintenanceActivity: 55 },
+  Rabat: { populationDensity: 74, infrastructureAge: 66, weatherStress: 58, maintenanceActivity: 68 },
+  Marrakech: { populationDensity: 70, infrastructureAge: 62, weatherStress: 84, maintenanceActivity: 52 },
+  "Fès": { populationDensity: 69, infrastructureAge: 71, weatherStress: 61, maintenanceActivity: 50 },
+  Tanger: { populationDensity: 64, infrastructureAge: 58, weatherStress: 52, maintenanceActivity: 64 },
+  Agadir: { populationDensity: 60, infrastructureAge: 57, weatherStress: 79, maintenanceActivity: 48 },
+  "Meknès": { populationDensity: 58, infrastructureAge: 65, weatherStress: 60, maintenanceActivity: 54 },
+  Oujda: { populationDensity: 56, infrastructureAge: 59, weatherStress: 77, maintenanceActivity: 46 },
+  "El Jadida": { populationDensity: 55, infrastructureAge: 54, weatherStress: 57, maintenanceActivity: 61 },
+  "Béni Mellal": { populationDensity: 52, infrastructureAge: 56, weatherStress: 73, maintenanceActivity: 49 },
+};
+
 let _id = 100;
 const uid = () => `r${++_id}`;
 

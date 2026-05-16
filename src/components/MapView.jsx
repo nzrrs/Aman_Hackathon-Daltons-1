@@ -44,6 +44,8 @@ export default function MapView() {
       const cfg = STATUS_CONFIG[report.status];
       const isActive = report.id === activeReport;
       const size = isActive ? 20 : 14;
+      const risk = report.risk;
+      const riskColor = '#f59e0b';
 
       const icon = L.divIcon({
         className: '',
@@ -66,6 +68,14 @@ export default function MapView() {
               <strong style="font-size:13px;">${report.neighborhood}, ${report.city}</strong>
             </div>
             <p style="font-size:12px;color:#8b97b0;margin-bottom:8px;line-height:1.5;">${report.description}</p>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;">
+              <span style="font-size:11px;font-weight:700;color:${riskColor};">Risque: ${risk.score}/100</span>
+              <span style="font-size:11px;color:#666;">Rétablissement: ${risk.recoveryHours}h</span>
+            </div>
+            <div style="font-size:10px;color:#667085;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Raisons</div>
+            <ul style="margin:0 0 8px 14px;padding:0;color:#8b97b0;font-size:11px;line-height:1.4;">
+              ${risk.reasons.map(r => `<li>${r}</li>`).join('')}
+            </ul>
             <div style="display:flex;justify-content:space-between;">
               <span style="font-size:11px;background:${cfg.bg};color:${cfg.color};padding:2px 8px;border-radius:10px;">${cfg.label}</span>
               <span style="font-size:11px;color:#666;">👍 ${report.upvotes}</span>
@@ -73,10 +83,26 @@ export default function MapView() {
           </div>
         `);
 
+      marker.bindTooltip(`
+        <div style="font-family:sans-serif;min-width:180px;">
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px;">${report.neighborhood}, ${report.city}</div>
+          <div style="font-size:11px;color:${riskColor};font-weight:700;">Risque: ${risk.score}/100</div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px;">Rétablissement: ${risk.recoveryHours}h</div>
+          <div style="font-size:10px;color:#8b97b0;line-height:1.4;">${risk.reasons.join(' · ')}</div>
+        </div>
+      `, { direction: 'top', offset: [0, -8], opacity: 0.95 });
+
       marker.on('click', () => setActive(report.id));
+      marker._reportId = report.id;
       markersRef.current.push(marker);
     });
-  }, [filteredReports, activeReport]);
+  }, [filteredReports]);
+
+  useEffect(() => {
+    if (!activeReport) return;
+    const activeMarker = markersRef.current.find(m => m._reportId === activeReport);
+    if (activeMarker) activeMarker.openPopup();
+  }, [activeReport]);
 
   return (
     <div style={{ flex: 1, position: 'relative' }}>
