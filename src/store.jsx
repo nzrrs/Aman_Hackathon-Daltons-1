@@ -22,6 +22,7 @@ const initialState = {
   reports: SEED_REPORTS,
   activeReport: null,
   filter: { city: "all", status: "all" },
+  showHeatmap: true,
   view: "map", // 'map' | 'list' | 'report'
   toast: null,
   simulation: {
@@ -71,6 +72,8 @@ function reducer(state, action) {
       return { ...state, filter: { ...state.filter, ...action.filter } };
     case "SET_VIEW":
       return { ...state, view: action.view };
+    case "SET_SHOW_HEATMAP":
+      return { ...state, showHeatmap: action.showHeatmap };
     case "TOAST":
       return { ...state, toast: action.message };
     case "CLEAR_TOAST":
@@ -172,6 +175,10 @@ export function StoreProvider({ children }) {
 
   const setView = useCallback((view) => {
     dispatch({ type: "SET_VIEW", view });
+  }, []);
+
+  const setShowHeatmap = useCallback((showHeatmap) => {
+    dispatch({ type: "SET_SHOW_HEATMAP", showHeatmap });
   }, []);
 
   const setSimulationFrequency = useCallback((seconds) => {
@@ -345,6 +352,7 @@ export function StoreProvider({ children }) {
       setActive,
       setFilter,
       setView,
+      setShowHeatmap,
       setSimulationFrequency,
       startSimulation,
       stopSimulation,
@@ -368,6 +376,7 @@ export function StoreProvider({ children }) {
       setActive,
       setFilter,
       setView,
+      setShowHeatmap,
       setSimulationFrequency,
       startSimulation,
       stopSimulation,
@@ -391,3 +400,5 @@ export function StoreProvider({ children }) {
 export function useStore() {
   return useContext(StoreCtx);
 }
+
+export default useStore;

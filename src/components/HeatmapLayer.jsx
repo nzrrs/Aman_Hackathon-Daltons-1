@@ -14,6 +14,8 @@ class WeatherHeatmap extends L.Layer {
     this.data = [];
     this.radius = options.radius || 50;
     this.maxOpacity = options.maxOpacity || 0.75;
+    this._rafId = null;
+    this._shouldTranslate = false;
   }
 
   onAdd(map) {
@@ -30,12 +32,12 @@ class WeatherHeatmap extends L.Layer {
     this._canvas.style.left = "0";
     map._panes.overlayPane.appendChild(this._container);
 
-    // Update continuously during drag and zoom for immediate visual feedback.
-    this._map.on("move", this._updateAndTranslate, this);
-    this._map.on("moveend", this._updateAndTranslate, this);
-    this._map.on("zoom", this._updateAndTranslate, this);
-    this._map.on("zoomend", this._updateAndTranslate, this);
-    this._map.on("resize", this._updateAndTranslate, this);
+    // Keep panning/zooming smooth by translating on frame events and redrawing only on settle.
+    this._map.on("move", this._translate, this);
+    this._map.on("moveend", this._scheduleUpdateAndTranslate, this);
+    this._map.on("zoom", this._translate, this);
+    this._map.on("zoomend", this._scheduleUpdateAndTranslate, this);
+    this._map.on("resize", this._scheduleUpdateAndTranslate, this);
 
     // position container and draw initial frame
     this._translate();
@@ -46,18 +48,22 @@ class WeatherHeatmap extends L.Layer {
   onRemove() {
     L.DomUtil.remove(this._container);
     if (this._map) {
-      this._map.off("move", this._updateAndTranslate, this);
-      this._map.off("moveend", this._updateAndTranslate, this);
-      this._map.off("zoom", this._updateAndTranslate, this);
-      this._map.off("zoomend", this._updateAndTranslate, this);
-      this._map.off("resize", this._updateAndTranslate, this);
+      this._map.off("move", this._translate, this);
+      this._map.off("moveend", this._scheduleUpdateAndTranslate, this);
+      this._map.off("zoom", this._translate, this);
+      this._map.off("zoomend", this._scheduleUpdateAndTranslate, this);
+      this._map.off("resize", this._scheduleUpdateAndTranslate, this);
+    }
+    if (this._rafId) {
+      L.Util.cancelAnimFrame(this._rafId);
+      this._rafId = null;
     }
   }
 
   setData(data) {
     this.data = data;
     if (this._map) {
-      this._update();
+      this._scheduleUpdate();
     }
   }
 
@@ -148,9 +154,23 @@ class WeatherHeatmap extends L.Layer {
     L.DomUtil.setPosition(this._container, panePos.multiplyBy(-1));
   }
 
-  _updateAndTranslate() {
-    this._translate();
-    this._update();
+  _scheduleUpdate() {
+    this._queueRender(false);
+  }
+
+  _scheduleUpdateAndTranslate() {
+    this._queueRender(true);
+  }
+
+  _queueRender(shouldTranslate) {
+    this._shouldTranslate = this._shouldTranslate || shouldTranslate;
+    if (this._rafId) return;
+    this._rafId = L.Util.requestAnimFrame(() => {
+      this._rafId = null;
+      if (this._shouldTranslate) this._translate();
+      this._shouldTranslate = false;
+      this._update();
+    }, this);
   }
 
   _interpolateColor(colorMap, pos) {

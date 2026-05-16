@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store.jsx';
 import { STATUS_CONFIG } from '../data/seed.js';
+import HeatmapLayer from './HeatmapLayer.jsx';
 
 // Fix Leaflet default icon paths broken by Vite bundling
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -15,7 +16,8 @@ export default function MapView() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
-  const { filteredReports, setActive, activeReport } = useStore();
+  const [leafletMap, setLeafletMap] = useState(null);
+  const { filteredReports, setActive, activeReport, showHeatmap } = useStore();
 
   useEffect(() => {
     if (mapInstance.current) return;
@@ -31,6 +33,7 @@ export default function MapView() {
     }).addTo(map);
 
     mapInstance.current = map;
+    setLeafletMap(map);
     setTimeout(() => map.invalidateSize(), 100);
   }, []);
 
@@ -96,6 +99,7 @@ export default function MapView() {
           </div>
         ))}
       </div>
+      <HeatmapLayer reports={filteredReports} showHeatmap={showHeatmap} mapInstance={leafletMap} />
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx';
 import { STATUS_CONFIG, CITIES } from '../data/seed.js';
 
 export default function FilterBar() {
-  const { filter, setFilter } = useStore();
+  const { filter, setFilter, view, showHeatmap, setShowHeatmap } = useStore();
 
   return (
     <div style={{
@@ -47,6 +47,27 @@ export default function FilterBar() {
           </button>
         ))}
       </div>
+
+      {view === 'map' && (
+        <button
+          onClick={() => setShowHeatmap(!showHeatmap)}
+          style={{
+            marginLeft: 'auto',
+            padding: '6px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border2)',
+            background: showHeatmap ? 'rgba(0,180,216,0.12)' : 'transparent',
+            color: showHeatmap ? 'var(--accent)' : 'var(--text2)',
+            fontSize: 12,
+            fontFamily: 'var(--font-body)',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          {showHeatmap ? '🔥 Heatmap ON' : '🔥 Heatmap OFF'}
+        </button>
+      )}
     </div>
   );
 }
