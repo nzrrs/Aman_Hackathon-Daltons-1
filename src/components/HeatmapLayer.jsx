@@ -32,11 +32,13 @@ class WeatherHeatmap extends L.Layer {
     this._canvas.style.left = "0";
     map._panes.overlayPane.appendChild(this._container);
 
-    // Keep panning/zooming smooth by translating on frame events and redrawing only on settle.
-    this._map.on("move", this._translate, this);
+    // Keep the heatmap accurate on every interaction frame (drag, zoom, kinetic pan).
+    this._map.on("move", this._scheduleUpdateAndTranslate, this);
     this._map.on("moveend", this._scheduleUpdateAndTranslate, this);
-    this._map.on("zoom", this._translate, this);
+    this._map.on("zoom", this._scheduleUpdateAndTranslate, this);
     this._map.on("zoomend", this._scheduleUpdateAndTranslate, this);
+    this._map.on("zoomanim", this._scheduleUpdateAndTranslate, this);
+    this._map.on("viewreset", this._scheduleUpdateAndTranslate, this);
     this._map.on("resize", this._scheduleUpdateAndTranslate, this);
 
     // position container and draw initial frame
@@ -48,10 +50,12 @@ class WeatherHeatmap extends L.Layer {
   onRemove() {
     L.DomUtil.remove(this._container);
     if (this._map) {
-      this._map.off("move", this._translate, this);
+      this._map.off("move", this._scheduleUpdateAndTranslate, this);
       this._map.off("moveend", this._scheduleUpdateAndTranslate, this);
-      this._map.off("zoom", this._translate, this);
+      this._map.off("zoom", this._scheduleUpdateAndTranslate, this);
       this._map.off("zoomend", this._scheduleUpdateAndTranslate, this);
+      this._map.off("zoomanim", this._scheduleUpdateAndTranslate, this);
+      this._map.off("viewreset", this._scheduleUpdateAndTranslate, this);
       this._map.off("resize", this._scheduleUpdateAndTranslate, this);
     }
     if (this._rafId) {
