@@ -31,7 +31,7 @@ function hoursToMs(hours) {
 }
 
 function normalizeStatus(status) {
-  return ["active", "partial", "scheduled", "resolved"].includes(status)
+  return ["active", "partial", "scheduled", "resolved", "false", "duplicate"].includes(status)
     ? status
     : "active";
 }

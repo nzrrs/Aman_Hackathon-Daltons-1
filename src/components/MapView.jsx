@@ -50,7 +50,12 @@ export default function MapView() {
   const markerClusterRef = useRef(null);
   const markersRef = useRef([]);
   const [leafletMap, setLeafletMap] = useState(null);
-  const { filteredReports, setActive, activeReport, showHeatmap } = useStore();
+  const {
+    filteredReports,
+    filteredHeatmapReports,
+    setActive,
+    showHeatmap,
+  } = useStore();
 
   useEffect(() => {
     if (mapInstance.current) return;
@@ -70,7 +75,8 @@ export default function MapView() {
       zoomToBoundsOnClick: true,
       spiderfyOnMaxZoom: true,
       removeOutsideVisibleBounds: true,
-      animate: true,
+      animate: false,
+      animateAddingMarkers: false,
       iconCreateFunction: createClusterIcon,
     });
     clusterLayer.addTo(map);
@@ -90,8 +96,7 @@ export default function MapView() {
   }, []);
 
   useEffect(() => {
-    if (!mapInstance.current || !markerClusterRef.current) return;
-
+    if (!markerClusterRef.current) return;
     markerClusterRef.current.clearLayers();
     markersRef.current = [];
 
@@ -99,18 +104,21 @@ export default function MapView() {
       .filter(hasValidCoordinates)
       .forEach(report => {
       const cfg = STATUS_CONFIG[report.status];
-      const isActive = report.id === activeReport;
-      const size = isActive ? 20 : 14;
+      const size = 14;
       const risk = report.risk;
       const riskColor = '#f59e0b';
+      const communityResolvedTag =
+        report.status === 'resolved' && report.resolvedBy === 'community'
+          ? '<div style="margin-top:6px;font-size:10px;font-weight:700;color:#10b981;">✅ Résolu par la communauté</div>'
+          : '';
 
       const icon = L.divIcon({
         className: '',
         html: `<div style="
           width:${size}px;height:${size}px;border-radius:50%;
           background:${cfg.dot};
-          border:${isActive ? '3px solid white' : '2px solid rgba(0,0,0,0.4)'};
-          box-shadow:0 0 ${isActive ? 14 : 8}px ${cfg.dot}99;
+          border:2px solid rgba(0,0,0,0.4);
+          box-shadow:0 0 8px ${cfg.dot}99;
         "></div>`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
@@ -136,6 +144,7 @@ export default function MapView() {
               <span style="font-size:11px;background:${cfg.bg};color:${cfg.color};padding:2px 8px;border-radius:10px;">${cfg.label}</span>
               <span style="font-size:11px;color:#666;">👍 ${report.upvotes}</span>
             </div>
+            ${communityResolvedTag}
           </div>
         `);
 
@@ -145,6 +154,7 @@ export default function MapView() {
           <div style="font-size:11px;color:${riskColor};font-weight:700;">Risque: ${risk.score}/100</div>
           <div style="font-size:11px;color:#666;margin-bottom:4px;">Rétablissement: ${risk.recoveryHours}h</div>
           <div style="font-size:10px;color:#8b97b0;line-height:1.4;">${risk.reasons.join(' · ')}</div>
+          ${communityResolvedTag}
         </div>
       `, { direction: 'top', offset: [0, -8], opacity: 0.95 });
 
@@ -154,17 +164,7 @@ export default function MapView() {
       markersRef.current.push(marker);
       markerClusterRef.current.addLayer(marker);
     });
-  }, [filteredReports, activeReport, setActive]);
-
-  useEffect(() => {
-    if (!activeReport || !markerClusterRef.current) return;
-    const activeMarker = markersRef.current.find(m => m._reportId === activeReport);
-    if (activeMarker) {
-      markerClusterRef.current.zoomToShowLayer(activeMarker, () => {
-        activeMarker.openPopup();
-      });
-    }
-  }, [activeReport]);
+  }, [filteredReports, setActive]);
 
   return (
     <div style={{ flex: 1, position: 'relative' }}>
@@ -184,7 +184,7 @@ export default function MapView() {
           </div>
         ))}
       </div>
-      <HeatmapLayer reports={filteredReports} showHeatmap={showHeatmap} mapInstance={leafletMap} />
+      <HeatmapLayer reports={filteredHeatmapReports} showHeatmap={showHeatmap} mapInstance={leafletMap} />
     </div>
   );
 }

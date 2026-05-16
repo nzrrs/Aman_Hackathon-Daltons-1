@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../store.jsx';
 import { STATUS_CONFIG } from '../data/seed.js';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import AppModal from './AppModal.jsx';
 
 function timeAgo(iso) {
   try {
@@ -13,10 +14,13 @@ function timeAgo(iso) {
 }
 
 export default function ReportCard({ report, compact = false }) {
-  const { upvote } = useStore();
+  const { upvote, markReportResolved } = useStore();
+  const [showResolveModal, setShowResolveModal] = useState(false);
   const cfg = STATUS_CONFIG[report.status];
   const risk = report.risk;
   const riskColor = '#f59e0b';
+  const canResolve = ['active', 'partial', 'scheduled'].includes(report.status);
+  const isCommunityResolved = report.status === 'resolved' && report.resolvedBy === 'community';
 
   return (
     <div style={{
@@ -48,6 +52,26 @@ export default function ReportCard({ report, compact = false }) {
           {cfg.label}
         </span>
       </div>
+
+      {isCommunityResolved && (
+        <div style={{
+          marginBottom: 12,
+          padding: '8px 10px',
+          borderRadius: 10,
+          border: '1px solid rgba(16,185,129,0.35)',
+          background: 'rgba(16,185,129,0.12)',
+          color: '#10b981',
+          fontSize: 12,
+          fontWeight: 700,
+        }}>
+          ✅ Résolution confirmée par la communauté
+          {(report.resolvedAt || report.estimatedRestore) && (
+            <span style={{ color: 'var(--text2)', fontWeight: 500 }}>
+              {' '}· {timeAgo(report.resolvedAt || report.estimatedRestore)}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Description */}
       {!compact && (
@@ -95,6 +119,26 @@ export default function ReportCard({ report, compact = false }) {
           💬 {report.comments} commentaires
         </span>
 
+        {canResolve && (
+          <button
+            onClick={() => setShowResolveModal(true)}
+            style={{
+              marginLeft: 'auto',
+              padding: '5px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(16,185,129,0.45)',
+              background: 'rgba(16,185,129,0.12)',
+              color: '#10b981',
+              fontSize: 12,
+              fontFamily: 'var(--font-body)',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            ✅ Marquer résolu
+          </button>
+        )}
+
         {report.estimatedRestore && new Date(report.estimatedRestore) > new Date() && (
           <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto' }}>
             ⏱ Rétablissement : {timeAgo(report.estimatedRestore).replace('dans ', '')}
@@ -107,6 +151,55 @@ export default function ReportCard({ report, compact = false }) {
           </span>
         )}
       </div>
+      <AppModal
+        open={showResolveModal}
+        onClose={() => setShowResolveModal(false)}
+        title="Marquer cette panne comme résolue ?"
+        description="Confirmez seulement si l'eau est revenue. Sans backend ni authentification, cette action est un signal communautaire et peut être erronée."
+        footer={(
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button
+              onClick={() => setShowResolveModal(false)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border2)',
+                background: 'transparent',
+                color: 'var(--text2)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={() => {
+                const updated = markReportResolved(report.id);
+                if (updated) setShowResolveModal(false);
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(16,185,129,0.45)',
+                background: 'rgba(16,185,129,0.12)',
+                color: '#10b981',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Confirmer
+            </button>
+          </div>
+        )}
+      >
+        <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
+          <strong>{report.neighborhood}</strong>
+          <span style={{ color: 'var(--text3)' }}> · {report.city}</span>
+          <div style={{ marginTop: 8 }}>{report.description}</div>
+        </div>
+      </AppModal>
     </div>
   );
 }

@@ -30,10 +30,11 @@ function hoursSince(iso) {
 }
 
 export default function AdminPanel() {
-  const { reports, setReportStatus, deleteReport, patchReport } = useStore();
+  const { reports, setReportStatus, markReportResolved, deleteReport, patchReport } = useStore();
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [pendingDeleteReport, setPendingDeleteReport] = useState(null);
+  const [pendingResolveReport, setPendingResolveReport] = useState(null);
   const [draft, setDraft] = useState({
     description: "",
     reportedBy: "",
@@ -198,26 +199,63 @@ export default function AdminPanel() {
                     <div style={{ fontSize: 12, color: "var(--text3)" }}>{report.city}</div>
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text2)" }}>{timeAgo(report.reportedAt)}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 11, borderRadius: 999, padding: "2px 8px", background: cfg.bg, color: cfg.color, fontWeight: 700 }}>
-                      {cfg.label}
-                    </span>
-                    {isDuplicate && (
-                      <span style={{ fontSize: 10, color: "#14b8a6", fontWeight: 700 }}>Doublon?</span>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, borderRadius: 999, padding: "2px 8px", background: cfg.bg, color: cfg.color, fontWeight: 700 }}>
+                        {cfg.label}
+                      </span>
+                      {report.status === "resolved" && report.resolvedBy === "community" && (
+                        <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700 }}>
+                          Signal communauté
+                        </span>
+                      )}
+                      {isDuplicate && (
+                        <span style={{ fontSize: 10, color: "#14b8a6", fontWeight: 700 }}>Doublon?</span>
+                      )}
                     {isLongActive && (
                       <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>Actif &gt;24h</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>{report.description}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {STATUS_ACTIONS.map((action) => (
-                      <button
-                        key={action.value}
-                        onClick={() => setReportStatus(report.id, action.value)}
+                  <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>
+                    <div>{report.description}</div>
+                    {report.status === "resolved" && report.resolvedBy === "community" && (
+                      <div
                         style={{
-                          padding: "4px 8px",
-                          borderRadius: 7,
+                          marginTop: 6,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          borderRadius: 999,
+                          border: "1px solid rgba(16,185,129,0.35)",
+                          background: "rgba(16,185,129,0.12)",
+                          color: "#10b981",
+                          padding: "2px 8px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        ✅ Résolu par la communauté
+                        {(report.resolvedAt || report.estimatedRestore) && (
+                          <span style={{ color: "var(--text2)", fontWeight: 500 }}>
+                            · {timeAgo(report.resolvedAt || report.estimatedRestore)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {STATUS_ACTIONS.map((action) => (
+                        <button
+                          key={action.value}
+                          onClick={() => {
+                            if (action.value === "resolved") {
+                              setPendingResolveReport(report);
+                              return;
+                            }
+                            setReportStatus(report.id, action.value);
+                          }}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 7,
                           border: `1px solid ${action.color}55`,
                           background: "transparent",
                           color: action.color,
@@ -357,6 +395,61 @@ export default function AdminPanel() {
             );
           })}
         </div>
+        <AppModal
+          open={Boolean(pendingResolveReport)}
+          onClose={() => setPendingResolveReport(null)}
+          title="Confirmer la résolution"
+          description="Sans backend ni authentification, cette résolution reste un signal communautaire et peut être inexacte ou malveillante."
+          footer={(
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setPendingResolveReport(null)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border2)",
+                  background: "transparent",
+                  color: "var(--text2)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (!pendingResolveReport) return;
+                  const updated = markReportResolved(pendingResolveReport.id);
+                  if (!updated) return;
+                  setPendingResolveReport(null);
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(16,185,129,0.45)",
+                  background: "rgba(16,185,129,0.12)",
+                  color: "#10b981",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Marquer résolu
+              </button>
+            </div>
+          )}
+        >
+          <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6 }}>
+            {pendingResolveReport ? (
+              <>
+                <strong>{pendingResolveReport.neighborhood}</strong>
+                <span style={{ color: "var(--text3)" }}> · {pendingResolveReport.city}</span>
+                <div style={{ marginTop: 8 }}>{pendingResolveReport.description}</div>
+              </>
+            ) : null}
+          </div>
+        </AppModal>
         <AppModal
           open={Boolean(pendingDeleteReport)}
           onClose={() => setPendingDeleteReport(null)}

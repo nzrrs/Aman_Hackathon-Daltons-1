@@ -16,6 +16,7 @@ import { buildReplayDataset, getReplaySnapshot } from "./data/replay.js";
 
 const StoreCtx = createContext(null);
 const STORAGE_KEY = "aman-offline-cache-v1";
+const RESOLUTION_UNDO_WINDOW_MS = 15000;
 
 let nextId = 200;
 const ADMIN_SESSION_KEY = "aman_admin_session";
@@ -65,6 +66,7 @@ const initialState = {
   activeReport: null,
   filter: { city: "all", status: "all" },
   showHeatmap: true,
+  resolutionUndo: null,
   view: "map", // 'map' | 'list' | 'report' | 'admin'
   toast: null,
   admin: {
@@ -255,6 +257,61 @@ function reducer(state, action) {
         ),
       };
     }
+    case "MARK_RESOLVED": {
+      const target = state.reports.find((r) => r.id === action.id);
+      if (!target) return state;
+      if (["resolved", "false", "duplicate"].includes(target.status)) return state;
+
+      const resolvedAt =
+        typeof action.resolvedAt === "string"
+          ? action.resolvedAt
+          : new Date().toISOString();
+      const expiresAt = Number.isFinite(action.expiresAt)
+        ? action.expiresAt
+        : Date.now() + RESOLUTION_UNDO_WINDOW_MS;
+
+      return {
+        ...state,
+        reports: state.reports.map((r) =>
+          r.id === action.id
+            ? {
+              ...r,
+              status: "resolved",
+              estimatedRestore: resolvedAt,
+              resolvedAt,
+              resolvedBy: "community",
+            }
+            : r,
+        ),
+        resolutionUndo: {
+          id: action.id,
+          previousStatus: target.status,
+          previousEstimatedRestore: target.estimatedRestore ?? null,
+          expiresAt,
+        },
+      };
+    }
+    case "UNDO_RESOLUTION": {
+      const pending = state.resolutionUndo;
+      if (!pending) return state;
+      return {
+        ...state,
+        reports: state.reports.map((r) =>
+          r.id === pending.id
+            ? {
+              ...r,
+              status: pending.previousStatus,
+              estimatedRestore: pending.previousEstimatedRestore,
+              resolvedAt: null,
+              resolvedBy: null,
+            }
+            : r,
+        ),
+        resolutionUndo: null,
+      };
+    }
+    case "CLEAR_RESOLUTION_UNDO":
+      return { ...state, resolutionUndo: null };
     case "DELETE_REPORT":
       return {
         ...state,
@@ -412,6 +469,7 @@ function createInitialState() {
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState, createInitialState);
   const reportsRef = useRef(state.reports);
+  const resolutionUndoRef = useRef(state.resolutionUndo);
   const [isOnline, setIsOnline] = React.useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -419,6 +477,23 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     reportsRef.current = state.reports;
   }, [state.reports]);
+
+  useEffect(() => {
+    resolutionUndoRef.current = state.resolutionUndo;
+  }, [state.resolutionUndo]);
+
+  useEffect(() => {
+    if (!state.resolutionUndo) return undefined;
+    const msLeft = state.resolutionUndo.expiresAt - Date.now();
+    if (msLeft <= 0) {
+      dispatch({ type: "CLEAR_RESOLUTION_UNDO" });
+      return undefined;
+    }
+    const timerId = setTimeout(() => {
+      dispatch({ type: "CLEAR_RESOLUTION_UNDO" });
+    }, msLeft);
+    return () => clearTimeout(timerId);
+  }, [state.resolutionUndo]);
 
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
@@ -478,6 +553,47 @@ export function StoreProvider({ children }) {
       return false;
     }
     dispatch({ type: "UPDATE_STATUS", id, status });
+    return true;
+  }, [pushToast]);
+
+  const markReportResolved = useCallback((id) => {
+    const target = reportsRef.current.find((r) => r.id === id);
+    if (!target) {
+      pushToast("❌ Signalement introuvable");
+      return false;
+    }
+    if (target.status === "resolved") {
+      pushToast("ℹ️ Déjà marqué comme rétabli");
+      return false;
+    }
+    if (target.status === "false" || target.status === "duplicate") {
+      pushToast("⚠️ Impossible de résoudre un rapport modéré");
+      return false;
+    }
+    const resolvedAt = new Date().toISOString();
+    dispatch({
+      type: "MARK_RESOLVED",
+      id,
+      resolvedAt,
+      expiresAt: Date.now() + RESOLUTION_UNDO_WINDOW_MS,
+    });
+    pushToast("✅ Panne marquée rétablie (signal communautaire)");
+    return true;
+  }, [pushToast]);
+
+  const undoLastResolution = useCallback(() => {
+    const pending = resolutionUndoRef.current;
+    if (!pending) {
+      pushToast("ℹ️ Aucune résolution à annuler");
+      return false;
+    }
+    if (pending.expiresAt <= Date.now()) {
+      dispatch({ type: "CLEAR_RESOLUTION_UNDO" });
+      pushToast("⌛ Fenêtre d'annulation expirée");
+      return false;
+    }
+    dispatch({ type: "UNDO_RESOLUTION" });
+    pushToast("↩️ Résolution annulée");
     return true;
   }, [pushToast]);
 
@@ -672,29 +788,65 @@ export function StoreProvider({ children }) {
     state.replay.windowDays,
   ]);
 
- const enrichedReports = replayReports.map((r) => ({
-  ...r,
-  risk: computeRisk(r, replayReports),
-}));
+  const enrichedCrisisReports = useMemo(
+    () => replayReports.map((r) => ({
+      ...r,
+      risk: computeRisk(r, replayReports),
+    })),
+    [replayReports],
+  );
 
-const filteredReports = enrichedReports.filter((r) => {
-    if (state.filter.city !== "all" && r.city !== state.filter.city)
-      return false;
-    if (state.filter.status !== "all" && r.status !== state.filter.status)
-      return false;
-    return true;
-  });
+  const enrichedStatusReports = useMemo(
+    () => replayStatusReports.map((r) => ({
+      ...r,
+      risk: computeRisk(r, replayStatusReports),
+    })),
+    [replayStatusReports],
+  );
 
-  const stats = {
-    total: replayStatusReports.length,
-    active: replayStatusReports.filter((r) => r.status === "active").length,
-    partial: replayStatusReports.filter((r) => r.status === "partial").length,
-    resolved: replayStatusReports.filter((r) => r.status === "resolved").length,
-    scheduled: replayStatusReports.filter((r) => r.status === "scheduled").length,
-    citiesAffected: new Set(
-      replayStatusReports.filter((r) => r.status === "active").map((r) => r.city),
-    ).size,
-  };
+  const filteredReports = useMemo(
+    () => enrichedStatusReports.filter((r) => {
+      if (state.filter.city !== "all" && r.city !== state.filter.city) return false;
+      if (state.filter.status !== "all" && r.status !== state.filter.status)
+        return false;
+      return true;
+    }),
+    [enrichedStatusReports, state.filter.city, state.filter.status],
+  );
+
+  const filteredHeatmapReports = useMemo(
+    () => enrichedCrisisReports.filter((r) => {
+      if (state.filter.city !== "all" && r.city !== state.filter.city) return false;
+      if (state.filter.status !== "all" && r.status !== state.filter.status)
+        return false;
+      return true;
+    }),
+    [enrichedCrisisReports, state.filter.city, state.filter.status],
+  );
+
+  const filteredListReports = useMemo(
+    () => enrichedStatusReports.filter((r) => {
+      if (state.filter.city !== "all" && r.city !== state.filter.city) return false;
+      if (state.filter.status !== "all" && r.status !== state.filter.status)
+        return false;
+      return true;
+    }),
+    [enrichedStatusReports, state.filter.city, state.filter.status],
+  );
+
+  const stats = useMemo(
+    () => ({
+      total: replayStatusReports.length,
+      active: replayStatusReports.filter((r) => r.status === "active").length,
+      partial: replayStatusReports.filter((r) => r.status === "partial").length,
+      resolved: replayStatusReports.filter((r) => r.status === "resolved").length,
+      scheduled: replayStatusReports.filter((r) => r.status === "scheduled").length,
+      citiesAffected: new Set(
+        replayStatusReports.filter((r) => r.status === "active").map((r) => r.city),
+      ).size,
+    }),
+    [replayStatusReports],
+  );
 
   const playReplay = useCallback(() => {
     dispatch({ type: "SET_REPLAY_PLAYING", isPlaying: true });
@@ -724,6 +876,8 @@ const filteredReports = enrichedReports.filter((r) => {
     () => ({
       ...state,
       filteredReports,
+      filteredHeatmapReports,
+      filteredListReports,
       stats,
       replay: {
         ...state.replay,
@@ -737,6 +891,8 @@ const filteredReports = enrichedReports.filter((r) => {
       setFilter,
       setView,
       setReportStatus,
+      markReportResolved,
+      undoLastResolution,
       deleteReport,
       patchReport,
       authenticateAdmin,
@@ -757,6 +913,8 @@ const filteredReports = enrichedReports.filter((r) => {
     [
       state,
       filteredReports,
+      filteredHeatmapReports,
+      filteredListReports,
       stats,
       replayDataset.startMs,
       replayDataset.endMs,
@@ -767,6 +925,8 @@ const filteredReports = enrichedReports.filter((r) => {
       setFilter,
       setView,
       setReportStatus,
+      markReportResolved,
+      undoLastResolution,
       deleteReport,
       patchReport,
       authenticateAdmin,

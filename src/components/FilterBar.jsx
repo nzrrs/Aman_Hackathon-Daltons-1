@@ -3,7 +3,29 @@ import { useStore } from "../store.jsx";
 import { STATUS_CONFIG, CITIES } from "../data/seed.js";
 
 export default function FilterBar() {
-  const { filter, setFilter, view, showHeatmap, setShowHeatmap } = useStore();
+  const {
+    filter,
+    setFilter,
+    view,
+    showHeatmap,
+    setShowHeatmap,
+    resolutionUndo,
+    undoLastResolution,
+  } = useStore();
+  const [now, setNow] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    if (!resolutionUndo) return undefined;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resolutionUndo]);
+
+  const undoSecondsLeft = React.useMemo(() => {
+    if (!resolutionUndo) return 0;
+    return Math.max(0, Math.ceil((resolutionUndo.expiresAt - now) / 1000));
+  }, [resolutionUndo, now]);
 
   return (
     <div
@@ -86,26 +108,48 @@ export default function FilterBar() {
         ))}
       </div>
 
-      {view === "map" && (
-        <button
-          onClick={() => setShowHeatmap(!showHeatmap)}
-          style={{
-            marginLeft: "auto",
-            padding: "6px 12px",
-            borderRadius: 8,
-            border: "1px solid var(--border2)",
-            background: showHeatmap ? "rgba(0,180,216,0.12)" : "transparent",
-            color: showHeatmap ? "var(--accent)" : "var(--text2)",
-            fontSize: 12,
-            fontFamily: "var(--font-body)",
-            fontWeight: 600,
-            cursor: "pointer",
-            transition: "all 0.15s",
-          }}
-        >
-          {showHeatmap ? "Heatmap ON" : "Heatmap OFF"}
-        </button>
-      )}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, color: "var(--text3)" }}>
+          Résolu = signal communautaire (non vérifié)
+        </span>
+        {resolutionUndo && (
+          <button
+            onClick={undoLastResolution}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(245,158,11,0.35)",
+              background: "rgba(245,158,11,0.12)",
+              color: "#f59e0b",
+              fontSize: 12,
+              fontFamily: "var(--font-body)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            ↩ Annuler résolution ({undoSecondsLeft}s)
+          </button>
+        )}
+        {view === "map" && (
+          <button
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "1px solid var(--border2)",
+              background: showHeatmap ? "rgba(0,180,216,0.12)" : "transparent",
+              color: showHeatmap ? "var(--accent)" : "var(--text2)",
+              fontSize: 12,
+              fontFamily: "var(--font-body)",
+              fontWeight: 600,
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {showHeatmap ? "Heatmap ON" : "Heatmap OFF"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

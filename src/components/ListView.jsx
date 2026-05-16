@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx';
 import ReportCard from './ReportCard.jsx';
 
 export default function ListView() {
-  const { filteredReports } = useStore();
+  const { filteredListReports } = useStore();
 
   return (
     <div style={{
@@ -17,11 +17,14 @@ export default function ListView() {
           Signalements récents
         </div>
         <div style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 20 }}>
-          {filteredReports.length} résultat{filteredReports.length !== 1 ? 's' : ''}
+          {filteredListReports.length} résultat{filteredListReports.length !== 1 ? 's' : ''}
+          <div style={{ marginTop: 6, fontSize: 11 }}>
+            Les résolutions sont des signaux communautaires (frontend-only, non autoritaires).
+          </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {filteredReports.length === 0 ? (
+          {filteredListReports.length === 0 ? (
             <div style={{
               textAlign: 'center', padding: '60px 0',
               color: 'var(--text3)', fontSize: 14,
@@ -29,7 +32,7 @@ export default function ListView() {
               Aucun signalement pour ces filtres.
             </div>
           ) : (
-            filteredReports.map((r, i) => (
+            filteredListReports.map((r, i) => (
               <div key={r.id} className={`fade-up`} style={{ animationDelay: `${i * 0.04}s` }}>
                 <ReportCard report={r} />
               </div>
