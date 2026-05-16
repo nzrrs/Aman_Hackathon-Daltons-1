@@ -20,6 +20,7 @@ Open http://localhost:5173
 | 📋 List | Filterable list of all reports with upvote + status badges |
 | ➕ Report | Form to submit a new outage (city, neighborhood, description) |
 | 🧪 Simulation | Starts/stops realistic live activity and controls event frequency |
+| ⏱ Timeline Replay | Scrub/play outage history with 1 day / 7 days / 14 days windows |
 
 ## For hackathon organizers
 
@@ -31,6 +32,7 @@ Open http://localhost:5173
 All app state lives in `src/store.jsx` (React Context + useReducer).
 Seed data is in `src/data/seed.js` — edit this to change initial reports.
 Simulation generation logic is in `src/data/simulation.js`.
+Timeline replay logic is in `src/data/replay.js`.
 
 ## Stack
 

@@ -7,9 +7,11 @@ export default function Header() {
     setView,
     stats,
     simulation,
+    replay,
     setSimulationFrequency,
     startSimulation,
     stopSimulation,
+    setReplayVisible,
   } = useStore();
 
   return (
@@ -91,6 +93,21 @@ export default function Header() {
             }}
           >
             {simulation.running ? '⏹ Arrêter' : '▶ Démarrer'}
+          </button>
+          <button
+            onClick={() => setReplayVisible(!replay.visible)}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border2)',
+              background: replay.visible ? 'rgba(0,180,216,0.12)' : 'transparent',
+              color: replay.visible ? 'var(--accent)' : 'var(--text2)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {replay.visible ? '🙈 Masquer timeline' : '👁 Afficher timeline'}
           </button>
         </div>
 

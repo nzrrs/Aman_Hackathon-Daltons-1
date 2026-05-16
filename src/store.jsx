@@ -12,8 +12,7 @@ import {
   generateSimulatedReport,
   pickSimulationResolution,
 } from "./data/simulation.js";
-
-import { PropTypes } from "prop-types";
+import { buildReplayDataset, getReplaySnapshot } from "./data/replay.js";
 
 const StoreCtx = createContext(null);
 
@@ -28,6 +27,13 @@ const initialState = {
   simulation: {
     running: false,
     frequencySec: 8,
+  },
+  replay: {
+    isPlaying: false,
+    speed: 1,
+    currentMs: Date.now(),
+    visible: true,
+    windowDays: 1,
   },
 };
 
@@ -82,6 +88,38 @@ function reducer(state, action) {
       return {
         ...state,
         simulation: { ...state.simulation, frequencySec: safeSeconds },
+      };
+    }
+    case "SET_REPLAY_PLAYING":
+      return {
+        ...state,
+        replay: { ...state.replay, isPlaying: action.isPlaying },
+      };
+    case "SET_REPLAY_SPEED": {
+      const nextSpeed =
+        action.speed === 1 || action.speed === 4 ? action.speed : 1;
+      return {
+        ...state,
+        replay: { ...state.replay, speed: nextSpeed },
+      };
+    }
+    case "SET_REPLAY_CURSOR":
+      return {
+        ...state,
+        replay: { ...state.replay, currentMs: action.currentMs },
+      };
+    case "SET_REPLAY_VISIBLE":
+      return {
+        ...state,
+        replay: { ...state.replay, visible: action.visible },
+      };
+    case "SET_REPLAY_WINDOW_DAYS": {
+      const windowDays = [1, 7, 14].includes(action.windowDays)
+        ? action.windowDays
+        : 1;
+      return {
+        ...state,
+        replay: { ...state.replay, windowDays },
       };
     }
     default:
@@ -198,7 +236,57 @@ export function StoreProvider({ children }) {
     runSimulationTick,
   ]);
 
-  const filteredReports = state.reports.filter((r) => {
+  const replayDataset = useMemo(
+    () => buildReplayDataset(state.reports, state.replay.windowDays),
+    [state.reports, state.replay.windowDays],
+  );
+
+  const replayCurrentMs = Math.min(
+    replayDataset.endMs,
+    Math.max(replayDataset.startMs, state.replay.currentMs),
+  );
+
+  useEffect(() => {
+    if (state.replay.currentMs === replayCurrentMs) return;
+    dispatch({ type: "SET_REPLAY_CURSOR", currentMs: replayCurrentMs });
+  }, [state.replay.currentMs, replayCurrentMs]);
+
+  const replayReports = useMemo(
+    () => getReplaySnapshot(replayDataset, replayCurrentMs),
+    [replayDataset, replayCurrentMs],
+  );
+
+  useEffect(() => {
+    if (!state.replay.isPlaying) return undefined;
+
+    const baseStepMs =
+      state.replay.windowDays === 1
+        ? 15000
+        : state.replay.windowDays === 7
+          ? 120000
+          : 300000;
+
+    const timerId = setInterval(() => {
+      const nextMs = Math.min(
+        replayDataset.endMs,
+        replayCurrentMs + baseStepMs * state.replay.speed,
+      );
+      dispatch({ type: "SET_REPLAY_CURSOR", currentMs: nextMs });
+      if (nextMs >= replayDataset.endMs) {
+        dispatch({ type: "SET_REPLAY_PLAYING", isPlaying: false });
+      }
+    }, 250);
+
+    return () => clearInterval(timerId);
+  }, [
+    state.replay.isPlaying,
+    state.replay.speed,
+    state.replay.windowDays,
+    replayCurrentMs,
+    replayDataset.endMs,
+  ]);
+
+  const filteredReports = replayReports.filter((r) => {
     if (state.filter.city !== "all" && r.city !== state.filter.city)
       return false;
     if (state.filter.status !== "all" && r.status !== state.filter.status)
@@ -217,11 +305,41 @@ export function StoreProvider({ children }) {
     ).size,
   };
 
+  const playReplay = useCallback(() => {
+    dispatch({ type: "SET_REPLAY_PLAYING", isPlaying: true });
+  }, []);
+
+  const pauseReplay = useCallback(() => {
+    dispatch({ type: "SET_REPLAY_PLAYING", isPlaying: false });
+  }, []);
+
+  const setReplaySpeed = useCallback((speed) => {
+    dispatch({ type: "SET_REPLAY_SPEED", speed });
+  }, []);
+
+  const setReplayCursor = useCallback((currentMs) => {
+    dispatch({ type: "SET_REPLAY_CURSOR", currentMs });
+  }, []);
+
+  const setReplayVisible = useCallback((visible) => {
+    dispatch({ type: "SET_REPLAY_VISIBLE", visible });
+  }, []);
+
+  const setReplayWindowDays = useCallback((windowDays) => {
+    dispatch({ type: "SET_REPLAY_WINDOW_DAYS", windowDays });
+  }, []);
+
   const value = useMemo(
     () => ({
       ...state,
       filteredReports,
       stats,
+      replay: {
+        ...state.replay,
+        startMs: replayDataset.startMs,
+        endMs: replayDataset.endMs,
+        currentMs: replayCurrentMs,
+      },
       addReport,
       upvote,
       setActive,
@@ -230,12 +348,21 @@ export function StoreProvider({ children }) {
       setSimulationFrequency,
       startSimulation,
       stopSimulation,
+      playReplay,
+      pauseReplay,
+      setReplaySpeed,
+      setReplayCursor,
+      setReplayVisible,
+      setReplayWindowDays,
       dispatch,
     }),
     [
       state,
       filteredReports,
       stats,
+      replayDataset.startMs,
+      replayDataset.endMs,
+      replayCurrentMs,
       addReport,
       upvote,
       setActive,
@@ -244,6 +371,12 @@ export function StoreProvider({ children }) {
       setSimulationFrequency,
       startSimulation,
       stopSimulation,
+      playReplay,
+      pauseReplay,
+      setReplaySpeed,
+      setReplayCursor,
+      setReplayVisible,
+      setReplayWindowDays,
       dispatch,
     ],
   );
@@ -258,4 +391,3 @@ export function StoreProvider({ children }) {
 export function useStore() {
   return useContext(StoreCtx);
 }
-
