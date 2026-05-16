@@ -1,7 +1,6 @@
 import React from 'react';
 import { useStore } from '../store.jsx';
-import { CITIES } from '../data/seed.js';
-import { STATUS_CONFIG } from '../data/seed.js';
+import { STATUS_CONFIG, CITIES } from '../data/seed.js';
 
 export default function FilterBar() {
   const { filter, setFilter } = useStore();

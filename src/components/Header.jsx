@@ -2,7 +2,15 @@ import React from 'react';
 import { useStore } from '../store.jsx';
 
 export default function Header() {
-  const { view, setView, stats } = useStore();
+  const {
+    view,
+    setView,
+    stats,
+    simulation,
+    setSimulationFrequency,
+    startSimulation,
+    stopSimulation,
+  } = useStore();
 
   return (
     <header style={{
@@ -39,6 +47,51 @@ export default function Header() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '4px 10px' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse-dot 2s infinite' }} />
           <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>{stats.active} pannes actives</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11,
+            color: simulation.running ? '#10b981' : 'var(--text3)',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            {simulation.running ? 'Simulation ON' : 'Simulation OFF'}
+          </span>
+          <select
+            value={simulation.frequencySec}
+            onChange={(e) => setSimulationFrequency(Number(e.target.value))}
+            style={{
+              background: 'var(--bg3)',
+              border: '1px solid var(--border2)',
+              color: 'var(--text)',
+              padding: '6px 8px',
+              borderRadius: 8,
+              fontSize: 12,
+              fontFamily: 'var(--font-body)',
+              cursor: 'pointer',
+            }}
+          >
+            {[3, 5, 8, 12, 20, 30].map((seconds) => (
+              <option key={seconds} value={seconds}>{seconds}s</option>
+            ))}
+          </select>
+          <button
+            onClick={simulation.running ? stopSimulation : startSimulation}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: simulation.running ? '1px solid rgba(239,68,68,0.45)' : '1px solid rgba(16,185,129,0.45)',
+              background: simulation.running ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+              color: simulation.running ? '#ef4444' : '#10b981',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {simulation.running ? '⏹ Arrêter' : '▶ Démarrer'}
+          </button>
         </div>
 
         {/* Nav */}

@@ -19,6 +19,7 @@ Open http://localhost:5173
 | 🗺 Map | Interactive Morocco map with color-coded outage pins |
 | 📋 List | Filterable list of all reports with upvote + status badges |
 | ➕ Report | Form to submit a new outage (city, neighborhood, description) |
+| 🧪 Simulation | Starts/stops realistic live activity and controls event frequency |
 
 ## For hackathon organizers
 
@@ -29,6 +30,7 @@ Open http://localhost:5173
 
 All app state lives in `src/store.jsx` (React Context + useReducer).
 Seed data is in `src/data/seed.js` — edit this to change initial reports.
+Simulation generation logic is in `src/data/simulation.js`.
 
 ## Stack
 
