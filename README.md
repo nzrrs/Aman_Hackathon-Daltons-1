@@ -12,6 +12,12 @@ npm run dev
 
 Open http://localhost:5173
 
+## PWA hors-ligne
+
+- L'application est installable depuis le navigateur (bouton **📲 Installer l'app** lorsqu'il est disponible).
+- Les dernières données connues sont sauvegardées localement et réaffichées sans connexion.
+- Un badge **Mode hors-ligne** s'affiche automatiquement quand le réseau est coupé.
+
 ## What's built
 
 | View | What it does |

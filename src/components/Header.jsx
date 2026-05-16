@@ -1,11 +1,13 @@
 import React from 'react';
 import { useStore } from '../store.jsx';
 
-export default function Header() {
+function Header() {
   const {
     view,
     setView,
     stats,
+    isOnline,
+    lastDataSyncAt,
     simulation,
     replay,
     setSimulationFrequency,
@@ -13,6 +15,45 @@ export default function Header() {
     stopSimulation,
     setReplayVisible,
   } = useStore();
+  const [deferredPrompt, setDeferredPrompt] = React.useState(null);
+  const [isInstalled, setIsInstalled] = React.useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  });
+
+  React.useEffect(() => {
+    const onBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+    };
+    const onAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('appinstalled', onAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const lastSyncLabel = React.useMemo(() => {
+    if (!lastDataSyncAt) return 'données locales';
+    const date = new Date(lastDataSyncAt);
+    if (Number.isNaN(date.getTime())) return 'données locales';
+    return `données locales · ${date.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' })}`;
+  }, [lastDataSyncAt]);
+
+  const handleInstall = React.useCallback(async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    if (choice.outcome !== 'accepted') return;
+    setDeferredPrompt(null);
+  }, [deferredPrompt]);
 
   return (
     <header style={{
@@ -50,6 +91,44 @@ export default function Header() {
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse-dot 2s infinite' }} />
           <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>{stats.active} pannes actives</span>
         </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.12)',
+            border: isOnline ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.3)',
+            borderRadius: 20,
+            padding: '4px 10px',
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isOnline ? '#10b981' : '#f59e0b', display: 'inline-block' }} />
+          <span style={{ fontSize: 12, color: isOnline ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
+            {isOnline ? 'En ligne' : `Mode hors-ligne · ${lastSyncLabel}`}
+          </span>
+        </div>
+        {!isInstalled && deferredPrompt && (
+          <button
+            onClick={handleInstall}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid rgba(0,180,216,0.45)',
+              background: 'rgba(0,180,216,0.12)',
+              color: 'var(--accent)',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            📲 Installer l&apos;app
+          </button>
+        )}
+        {isInstalled && (
+          <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
+            App installée
+          </span>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
@@ -133,3 +212,5 @@ export default function Header() {
     </header>
   );
 }
+
+export default Header;

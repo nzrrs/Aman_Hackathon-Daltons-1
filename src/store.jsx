@@ -15,6 +15,7 @@ import {
 import { buildReplayDataset, getReplaySnapshot } from "./data/replay.js";
 
 const StoreCtx = createContext(null);
+const STORAGE_KEY = "aman-offline-cache-v1";
 
 let nextId = 200;
 
@@ -36,6 +37,7 @@ const initialState = {
     visible: true,
     windowDays: 1,
   },
+  lastDataSyncAt: null,
 };
 
 const RISK_WEIGHTS = {
@@ -243,18 +245,108 @@ function reducer(state, action) {
         replay: { ...state.replay, windowDays },
       };
     }
+    case "SET_LAST_DATA_SYNC":
+      if (state.lastDataSyncAt === action.value) return state;
+      return { ...state, lastDataSyncAt: action.value };
     default:
       return state;
   }
 }
 
+function readPersistedState() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.reports)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function computeNextIdFromReports(reports) {
+  const maxId = reports.reduce((max, report) => {
+    const match = /^r(\d+)$/.exec(report?.id ?? "");
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, nextId);
+  nextId = Math.max(nextId, maxId);
+}
+
+function createInitialState() {
+  const persisted = readPersistedState();
+  if (!persisted) return initialState;
+
+  const reports = Array.isArray(persisted.reports)
+    ? persisted.reports
+    : initialState.reports;
+  computeNextIdFromReports(reports);
+
+  return {
+    ...initialState,
+    reports,
+    activeReport: persisted.activeReport ?? null,
+    filter: { ...initialState.filter, ...(persisted.filter || {}) },
+    showHeatmap:
+      typeof persisted.showHeatmap === "boolean"
+        ? persisted.showHeatmap
+        : initialState.showHeatmap,
+    view: ["map", "list", "report"].includes(persisted.view)
+      ? persisted.view
+      : initialState.view,
+    simulation: {
+      ...initialState.simulation,
+      running: false,
+      frequencySec: Number.isFinite(persisted?.simulation?.frequencySec)
+        ? Math.min(60, Math.max(2, Math.round(persisted.simulation.frequencySec)))
+        : initialState.simulation.frequencySec,
+    },
+    replay: {
+      ...initialState.replay,
+      isPlaying: false,
+      speed: persisted?.replay?.speed === 4 ? 4 : 1,
+      currentMs: Number.isFinite(persisted?.replay?.currentMs)
+        ? persisted.replay.currentMs
+        : Date.now(),
+      visible:
+        typeof persisted?.replay?.visible === "boolean"
+          ? persisted.replay.visible
+          : initialState.replay.visible,
+      windowDays: [1, 7, 14].includes(persisted?.replay?.windowDays)
+        ? persisted.replay.windowDays
+        : initialState.replay.windowDays,
+    },
+    lastDataSyncAt:
+      typeof persisted.lastDataSyncAt === "string"
+        ? persisted.lastDataSyncAt
+        : null,
+  };
+}
+
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, createInitialState);
   const reportsRef = useRef(state.reports);
+  const [isOnline, setIsOnline] = React.useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
 
   useEffect(() => {
     reportsRef.current = state.reports;
   }, [state.reports]);
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
 
   const pushToast = useCallback((message) => {
     dispatch({ type: "TOAST", message });
@@ -416,6 +508,41 @@ export function StoreProvider({ children }) {
     replayDataset.endMs,
   ]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const persistedState = {
+      reports: state.reports,
+      activeReport: state.activeReport,
+      filter: state.filter,
+      showHeatmap: state.showHeatmap,
+      view: state.view,
+      simulation: { frequencySec: state.simulation.frequencySec },
+      replay: {
+        speed: state.replay.speed,
+        visible: state.replay.visible,
+        windowDays: state.replay.windowDays,
+      },
+      lastDataSyncAt: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
+    dispatch({
+      type: "SET_LAST_DATA_SYNC",
+      value: persistedState.lastDataSyncAt,
+    });
+  }, [
+    state.reports,
+    state.activeReport,
+    state.filter,
+    state.showHeatmap,
+    state.view,
+    state.simulation.frequencySec,
+    state.replay.speed,
+    state.replay.visible,
+    state.replay.windowDays,
+  ]);
+
  const enrichedReports = replayReports.map((r) => ({
   ...r,
   risk: computeRisk(r, replayReports),
@@ -490,6 +617,7 @@ const filteredReports = enrichedReports.filter((r) => {
       setReplayCursor,
       setReplayVisible,
       setReplayWindowDays,
+      isOnline,
       dispatch,
     }),
     [
@@ -514,6 +642,7 @@ const filteredReports = enrichedReports.filter((r) => {
       setReplayCursor,
       setReplayVisible,
       setReplayWindowDays,
+      isOnline,
       dispatch,
     ],
   );
