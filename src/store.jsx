@@ -38,6 +38,124 @@ const initialState = {
   },
 };
 
+const RISK_WEIGHTS = {
+  populationDensity: 0.25,
+  infrastructureAge: 0.2,
+  weatherStress: 0.2,
+  outageFrequency: 0.2,
+  maintenanceActivity: 0.15,
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function computeOutageFrequency(report, reports) {
+  const base = hashString(`${report.city}-${report.neighborhood}`) % 45;
+  const neighborhoodActive = reports.filter(r =>
+    r.city === report.city &&
+    r.neighborhood === report.neighborhood &&
+    r.status !== 'resolved'
+  ).length;
+  const statusBoost = report.status === 'active' ? 12 : report.status === 'partial' ? 6 : 3;
+  return clamp(base + neighborhoodActive * 10 + statusBoost, 10, 100);
+}
+const CITY_RISK_FACTORS = {
+  Casablanca: {
+    populationDensity: 90,
+    infrastructureAge: 75,
+    weatherStress: 70,
+    maintenanceActivity: 50,
+  },
+  Rabat: {
+    populationDensity: 70,
+    infrastructureAge: 60,
+    weatherStress: 65,
+    maintenanceActivity: 65,
+  },
+  Marrakech: {
+    populationDensity: 65,
+    infrastructureAge: 70,
+    weatherStress: 85,
+    maintenanceActivity: 45,
+  },
+  Fes: {
+    populationDensity: 60,
+    infrastructureAge: 80,
+    weatherStress: 75,
+    maintenanceActivity: 40,
+  },
+  Tangier: {
+    populationDensity: 68,
+    infrastructureAge: 55,
+    weatherStress: 60,
+    maintenanceActivity: 60,
+  },
+};
+
+function computeRisk(report, reports) {
+  const cityBase = CITY_RISK_FACTORS[report.city] || {
+    populationDensity: 55,
+    infrastructureAge: 55,
+    weatherStress: 55,
+    maintenanceActivity: 55,
+  };
+
+  const outageFrequency = computeOutageFrequency(report, reports);
+  const maintenanceRisk = 100 - cityBase.maintenanceActivity;
+
+  const weightedScore =
+    cityBase.populationDensity * RISK_WEIGHTS.populationDensity +
+    cityBase.infrastructureAge * RISK_WEIGHTS.infrastructureAge +
+    cityBase.weatherStress * RISK_WEIGHTS.weatherStress +
+    outageFrequency * RISK_WEIGHTS.outageFrequency +
+    maintenanceRisk * RISK_WEIGHTS.maintenanceActivity;
+
+  const severityBoost = report.severity === 'high' ? 8 : report.severity === 'low' ? -5 : 0;
+  const statusBoost = report.status === 'active' ? 6 : report.status === 'scheduled' ? -4 : 0;
+  const upvoteBoost = clamp(Math.round(report.upvotes / 10), 0, 6);
+
+  const score = clamp(Math.round(weightedScore + severityBoost + statusBoost + upvoteBoost), 0, 100);
+
+  const statusMultiplier = report.status === 'active' ? 1.2 : report.status === 'partial' ? 0.9 : report.status === 'scheduled' ? 0.7 : 0.3;
+  const maintenanceRelief = cityBase.maintenanceActivity / 25;
+  const baseHours = 2 + score / 8;
+  const recoveryHours = clamp(Math.round(baseHours * statusMultiplier - maintenanceRelief + (report.severity === 'high' ? 2 : 0)), 0, 96);
+
+  const contributions = [
+    { key: 'Population dense', value: cityBase.populationDensity, weight: RISK_WEIGHTS.populationDensity },
+    { key: 'Réseau vieillissant', value: cityBase.infrastructureAge, weight: RISK_WEIGHTS.infrastructureAge },
+    { key: 'Chaleur / sécheresse', value: cityBase.weatherStress, weight: RISK_WEIGHTS.weatherStress },
+    { key: 'Pannes passées', value: outageFrequency, weight: RISK_WEIGHTS.outageFrequency },
+    { key: 'Maintenance faible', value: maintenanceRisk, weight: RISK_WEIGHTS.maintenanceActivity },
+  ];
+
+  const reasons = contributions
+    .sort((a, b) => (b.value * b.weight) - (a.value * a.weight))
+    .slice(0, 3)
+    .map(item => `${item.key}: ${item.value}/100`);
+
+  return {
+    score,
+    recoveryHours,
+    reasons,
+    factors: {
+      populationDensity: cityBase.populationDensity,
+      infrastructureAge: cityBase.infrastructureAge,
+      weatherStress: cityBase.weatherStress,
+      outageFrequency,
+      maintenanceActivity: cityBase.maintenanceActivity,
+    },
+  };
+}
+
 function reducer(state, action) {
   switch (action.type) {
     case "ADD_REPORT":
@@ -298,7 +416,12 @@ export function StoreProvider({ children }) {
     replayDataset.endMs,
   ]);
 
-  const filteredReports = replayReports.filter((r) => {
+ const enrichedReports = replayReports.map((r) => ({
+  ...r,
+  risk: computeRisk(r, replayReports),
+}));
+
+const filteredReports = enrichedReports.filter((r) => {
     if (state.filter.city !== "all" && r.city !== state.filter.city)
       return false;
     if (state.filter.status !== "all" && r.status !== state.filter.status)

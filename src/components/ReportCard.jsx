@@ -15,6 +15,8 @@ function timeAgo(iso) {
 export default function ReportCard({ report, compact = false }) {
   const { upvote } = useStore();
   const cfg = STATUS_CONFIG[report.status];
+  const risk = report.risk;
+  const riskColor = '#f59e0b';
 
   return (
     <div style={{
@@ -53,6 +55,26 @@ export default function ReportCard({ report, compact = false }) {
           {report.description}
         </p>
       )}
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 6,
+        background: 'var(--bg3)', border: '1px solid var(--border2)',
+        borderRadius: 10, padding: compact ? 8 : 10, marginBottom: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: riskColor }}>
+            Risque: {risk.score}/100
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            Rétablissement estimé: {risk.recoveryHours}h
+          </span>
+        </div>
+        {!compact && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.5 }}>
+            {risk.reasons.join(' · ')}
+          </div>
+        )}
+      </div>
 
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
