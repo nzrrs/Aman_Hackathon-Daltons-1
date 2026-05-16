@@ -122,17 +122,19 @@ export function buildReplayDataset(reports, windowDays = 1) {
   };
 }
 
-export function getReplaySnapshot(dataset, timeMs) {
+export function getReplaySnapshot(dataset, timeMs, options = {}) {
   if (!dataset || !Array.isArray(dataset.entries)) return [];
 
+  const playableOnly = options.playableOnly !== false;
   const safeTime = clamp(timeMs, dataset.startMs, dataset.endMs);
-  const activeReports = [];
+  const snapshotReports = [];
 
   for (const entry of dataset.entries) {
     const currentStatus = statusAt(entry.transitions, safeTime);
-    if (!PLAYABLE_STATUSES.has(currentStatus)) continue;
-    activeReports.push({ ...entry.report, status: currentStatus });
+    if (!currentStatus) continue;
+    if (playableOnly && !PLAYABLE_STATUSES.has(currentStatus)) continue;
+    snapshotReports.push({ ...entry.report, status: currentStatus });
   }
 
-  return activeReports;
+  return snapshotReports;
 }

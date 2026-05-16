@@ -252,7 +252,12 @@ export function StoreProvider({ children }) {
   }, [state.replay.currentMs, replayCurrentMs]);
 
   const replayReports = useMemo(
-    () => getReplaySnapshot(replayDataset, replayCurrentMs),
+    () => getReplaySnapshot(replayDataset, replayCurrentMs, { playableOnly: true }),
+    [replayDataset, replayCurrentMs],
+  );
+
+  const replayStatusReports = useMemo(
+    () => getReplaySnapshot(replayDataset, replayCurrentMs, { playableOnly: false }),
     [replayDataset, replayCurrentMs],
   );
 
@@ -295,13 +300,13 @@ export function StoreProvider({ children }) {
   });
 
   const stats = {
-    total: state.reports.length,
-    active: state.reports.filter((r) => r.status === "active").length,
-    partial: state.reports.filter((r) => r.status === "partial").length,
-    resolved: state.reports.filter((r) => r.status === "resolved").length,
-    scheduled: state.reports.filter((r) => r.status === "scheduled").length,
+    total: replayStatusReports.length,
+    active: replayStatusReports.filter((r) => r.status === "active").length,
+    partial: replayStatusReports.filter((r) => r.status === "partial").length,
+    resolved: replayStatusReports.filter((r) => r.status === "resolved").length,
+    scheduled: replayStatusReports.filter((r) => r.status === "scheduled").length,
     citiesAffected: new Set(
-      state.reports.filter((r) => r.status === "active").map((r) => r.city),
+      replayStatusReports.filter((r) => r.status === "active").map((r) => r.city),
     ).size,
   };
 
