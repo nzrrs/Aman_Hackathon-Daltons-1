@@ -12,7 +12,7 @@ export default function Toast() {
       borderRadius: 12, padding: '12px 24px',
       color: 'var(--text)', fontSize: 14, fontWeight: 500,
       boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-      zIndex: 9999, animation: 'fadeUp 0.3s ease',
+      zIndex: 13000, animation: 'fadeUp 0.3s ease',
       whiteSpace: 'nowrap',
     }}>
       {toast}

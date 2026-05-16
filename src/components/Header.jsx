@@ -1,5 +1,6 @@
-import React from 'react';
-import { useStore } from '../store.jsx';
+import React, { useState } from "react";
+import { useStore } from "../store.jsx";
+import AppModal from "./AppModal.jsx";
 
 function Header() {
   const {
@@ -8,8 +9,11 @@ function Header() {
     stats,
     isOnline,
     lastDataSyncAt,
+    admin,
     simulation,
     replay,
+    authenticateAdmin,
+    logoutAdmin,
     setSimulationFrequency,
     startSimulation,
     stopSimulation,
@@ -17,8 +21,11 @@ function Header() {
   } = useStore();
   const [deferredPrompt, setDeferredPrompt] = React.useState(null);
   const [isInstalled, setIsInstalled] = React.useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true
+    );
   });
 
   React.useEffect(() => {
@@ -31,184 +38,384 @@ function Header() {
       setDeferredPrompt(null);
     };
 
-    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-    window.addEventListener('appinstalled', onAppInstalled);
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', onAppInstalled);
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
     };
   }, []);
 
   const lastSyncLabel = React.useMemo(() => {
-    if (!lastDataSyncAt) return 'données locales';
+    if (!lastDataSyncAt) return "données locales";
     const date = new Date(lastDataSyncAt);
-    if (Number.isNaN(date.getTime())) return 'données locales';
-    return `données locales · ${date.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' })}`;
+    if (Number.isNaN(date.getTime())) return "données locales";
+    return `données locales · ${date.toLocaleTimeString("fr-MA", { hour: "2-digit", minute: "2-digit" })}`;
   }, [lastDataSyncAt]);
 
   const handleInstall = React.useCallback(async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
-    if (choice.outcome !== 'accepted') return;
+    if (choice.outcome !== "accepted") return;
     setDeferredPrompt(null);
   }, [deferredPrompt]);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminKeyInput, setAdminKeyInput] = useState("");
+
+  const handleAdminAccess = (event) => {
+    event.preventDefault();
+    const ok = authenticateAdmin(adminKeyInput.trim());
+    if (ok) setView("admin");
+    if (ok) {
+      setShowAdminModal(false);
+      setAdminKeyInput("");
+    }
+  };
 
   return (
-    <header style={{
-      background: 'var(--bg2)',
-      borderBottom: '1px solid var(--border)',
-      padding: '0 24px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: 60,
-      flexShrink: 0,
-      zIndex: 100,
-    }}>
+    <header
+      style={{
+        background: "var(--bg2)",
+        borderBottom: "1px solid var(--border)",
+        padding: "0 24px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: 60,
+        flexShrink: 0,
+        zIndex: 100,
+      }}
+    >
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 8,
-          background: 'linear-gradient(135deg, #00b4d8, #0077a8)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16,
-        }}>💧</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: "linear-gradient(135deg, #00b4d8, #0077a8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 16,
+          }}
+        >
+          💧
+        </div>
         <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 18, lineHeight: 1, letterSpacing: '-0.5px' }}>
+          <div
+            style={{
+              fontFamily: "var(--font-display)",
+              fontWeight: 800,
+              fontSize: 18,
+              lineHeight: 1,
+              letterSpacing: "-0.5px",
+            }}
+          >
             Aman
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--text3)",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
             Maroc · Signalement d'eau
           </div>
         </div>
       </div>
 
       {/* Live badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '4px 10px' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse-dot 2s infinite' }} />
-          <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>{stats.active} pannes actives</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(239,68,68,0.1)",
+            border: "1px solid rgba(239,68,68,0.2)",
+            borderRadius: 20,
+            padding: "4px 10px",
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#ef4444",
+              display: "inline-block",
+              animation: "pulse-dot 2s infinite",
+            }}
+          />
+          <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+            {stats.active} pannes actives
+          </span>
         </div>
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
+            display: "flex",
+            alignItems: "center",
             gap: 6,
-            background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.12)',
-            border: isOnline ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.3)',
+            background: isOnline
+              ? "rgba(16,185,129,0.1)"
+              : "rgba(245,158,11,0.12)",
+            border: isOnline
+              ? "1px solid rgba(16,185,129,0.3)"
+              : "1px solid rgba(245,158,11,0.3)",
             borderRadius: 20,
-            padding: '4px 10px',
+            padding: "4px 10px",
           }}
         >
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: isOnline ? '#10b981' : '#f59e0b', display: 'inline-block' }} />
-          <span style={{ fontSize: 12, color: isOnline ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
-            {isOnline ? 'En ligne' : `Mode hors-ligne · ${lastSyncLabel}`}
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: isOnline ? "#10b981" : "#f59e0b",
+              display: "inline-block",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 12,
+              color: isOnline ? "#10b981" : "#f59e0b",
+              fontWeight: 700,
+            }}
+          >
+            {isOnline ? "En ligne" : `Mode hors-ligne · ${lastSyncLabel}`}
           </span>
         </div>
         {!isInstalled && deferredPrompt && (
           <button
             onClick={handleInstall}
             style={{
-              padding: '6px 12px',
+              padding: "6px 12px",
               borderRadius: 8,
-              border: '1px solid rgba(0,180,216,0.45)',
-              background: 'rgba(0,180,216,0.12)',
-              color: 'var(--accent)',
+              border: "1px solid rgba(0,180,216,0.45)",
+              background: "rgba(0,180,216,0.12)",
+              color: "var(--accent)",
               fontSize: 12,
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: "pointer",
             }}
           >
             📲 Installer l&apos;app
           </button>
         )}
         {isInstalled && (
-          <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
+          <span
+            style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600 }}
+          >
             App installée
           </span>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            fontSize: 11,
-            color: simulation.running ? '#10b981' : 'var(--text3)',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-          }}>
-            {simulation.running ? 'Simulation ON' : 'Simulation OFF'}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 11,
+              color: simulation.running ? "#10b981" : "var(--text3)",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+            }}
+          >
+            {simulation.running ? "Simulation ON" : "Simulation OFF"}
           </span>
           <select
             value={simulation.frequencySec}
             onChange={(e) => setSimulationFrequency(Number(e.target.value))}
             style={{
-              background: 'var(--bg3)',
-              border: '1px solid var(--border2)',
-              color: 'var(--text)',
-              padding: '6px 8px',
+              background: "var(--bg3)",
+              border: "1px solid var(--border2)",
+              color: "var(--text)",
+              padding: "6px 8px",
               borderRadius: 8,
               fontSize: 12,
-              fontFamily: 'var(--font-body)',
-              cursor: 'pointer',
+              fontFamily: "var(--font-body)",
+              cursor: "pointer",
             }}
           >
             {[3, 5, 8, 12, 20, 30].map((seconds) => (
-              <option key={seconds} value={seconds}>{seconds}s</option>
+              <option key={seconds} value={seconds}>
+                {seconds}s
+              </option>
             ))}
           </select>
           <button
             onClick={simulation.running ? stopSimulation : startSimulation}
             style={{
-              padding: '6px 12px',
+              padding: "6px 12px",
               borderRadius: 8,
-              border: simulation.running ? '1px solid rgba(239,68,68,0.45)' : '1px solid rgba(16,185,129,0.45)',
-              background: simulation.running ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
-              color: simulation.running ? '#ef4444' : '#10b981',
+              border: simulation.running
+                ? "1px solid rgba(239,68,68,0.45)"
+                : "1px solid rgba(16,185,129,0.45)",
+              background: simulation.running
+                ? "rgba(239,68,68,0.12)"
+                : "rgba(16,185,129,0.12)",
+              color: simulation.running ? "#ef4444" : "#10b981",
               fontSize: 12,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: "pointer",
             }}
           >
-            {simulation.running ? '⏹ Arrêter' : '▶ Démarrer'}
+            {simulation.running ? "⏹ Arrêter" : "▶ Démarrer"}
           </button>
           <button
             onClick={() => setReplayVisible(!replay.visible)}
             style={{
-              padding: '6px 12px',
+              padding: "6px 12px",
               borderRadius: 8,
-              border: '1px solid var(--border2)',
-              background: replay.visible ? 'rgba(0,180,216,0.12)' : 'transparent',
-              color: replay.visible ? 'var(--accent)' : 'var(--text2)',
+              border: "1px solid var(--border2)",
+              background: replay.visible
+                ? "rgba(0,180,216,0.12)"
+                : "transparent",
+              color: replay.visible ? "var(--accent)" : "var(--text2)",
               fontSize: 12,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: "pointer",
             }}
           >
-            {replay.visible ? '🙈 Masquer timeline' : '👁 Afficher timeline'}
+            {replay.visible ? "🙈 Masquer timeline" : "👁 Afficher timeline"}
           </button>
         </div>
 
         {/* Nav */}
-        <nav style={{ display: 'flex', gap: 4 }}>
+        <nav style={{ display: "flex", gap: 4 }}>
           {[
-            { id: 'map', label: '🗺 Carte' },
-            { id: 'list', label: '📋 Liste' },
-            { id: 'report', label: '➕ Signaler' },
+            { id: "map", label: "🗺 Carte" },
+            { id: "list", label: "📋 Liste" },
+            { id: "report", label: "➕ Signaler" },
+            ...(admin.isAuthenticated
+              ? [{ id: "admin", label: "🛡 Admin" }]
+              : []),
           ].map(({ id, label }) => (
-            <button key={id} onClick={() => setView(id)} style={{
-              padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 500,
-              background: view === id ? 'var(--accent)' : 'transparent',
-              color: view === id ? '#fff' : 'var(--text2)',
-              transition: 'all 0.15s',
-            }}>
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 8,
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "var(--font-body)",
+                fontSize: 13,
+                fontWeight: 500,
+                background: view === id ? "var(--accent)" : "transparent",
+                color: view === id ? "#fff" : "var(--text2)",
+                transition: "all 0.15s",
+              }}
+            >
               {label}
             </button>
           ))}
+          {!admin.isAuthenticated ? (
+            <button
+              onClick={() => setShowAdminModal(true)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid var(--border2)",
+                background: "transparent",
+                color: "var(--text3)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              🔐 Admin
+            </button>
+          ) : (
+            <button
+              onClick={logoutAdmin}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(245,158,11,0.35)",
+                background: "rgba(245,158,11,0.08)",
+                color: "#f59e0b",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              🔓 Quitter Admin
+            </button>
+          )}
         </nav>
       </div>
+      <AppModal
+        open={showAdminModal}
+        onClose={() => {
+          setShowAdminModal(false);
+          setAdminKeyInput("");
+        }}
+        title="Accès administrateur"
+        description="Entrez la clé admin pour ouvrir la console de modération."
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              onClick={() => {
+                setShowAdminModal(false);
+                setAdminKeyInput("");
+              }}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid var(--border2)",
+                background: "transparent",
+                color: "var(--text2)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleAdminAccess}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,180,216,0.4)",
+                background: "rgba(0,180,216,0.14)",
+                color: "var(--accent)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Déverrouiller
+            </button>
+          </div>
+        }
+      >
+        <input
+          autoFocus
+          type="password"
+          value={adminKeyInput}
+          onChange={(event) => setAdminKeyInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") handleAdminAccess(event);
+          }}
+          placeholder="Clé admin"
+          style={{
+            width: "100%",
+            background: "var(--bg3)",
+            border: "1px solid var(--border2)",
+            color: "var(--text)",
+            padding: "10px 12px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontFamily: "var(--font-body)",
+          }}
+        />
+      </AppModal>
     </header>
   );
 }

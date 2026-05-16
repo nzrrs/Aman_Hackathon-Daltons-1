@@ -7,21 +7,24 @@ import TimelineReplay from './components/TimelineReplay.jsx';
 import MapView from './components/MapView.jsx';
 import ListView from './components/ListView.jsx';
 import ReportForm from './components/ReportForm.jsx';
+import AdminPanel from './components/AdminPanel.jsx';
 import Toast from './components/Toast.jsx';
 
 function Main() {
   const { view, replay } = useStore();
+  const showPublicControls = view === 'map' || view === 'list';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <Header />
       <StatsBar />
-      {view !== 'report' && <FilterBar />}
-      {view !== 'report' && replay.visible && <TimelineReplay />}
+      {showPublicControls && <FilterBar />}
+      {showPublicControls && replay.visible && <TimelineReplay />}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {view === 'map' && <MapView />}
         {view === 'list' && <ListView />}
         {view === 'report' && <ReportForm />}
+        {view === 'admin' && <AdminPanel />}
       </div>
       <Toast />
     </div>

@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useStore } from '../store.jsx';
 import { STATUS_CONFIG } from '../data/seed.js';
 import HeatmapLayer from './HeatmapLayer.jsx';
@@ -12,9 +15,39 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
 
+const SEVERITY_PRIORITY = { low: 1, medium: 2, high: 3 };
+
+function getClusterSeverity(markers) {
+  let highest = 'low';
+  markers.forEach((marker) => {
+    const markerSeverity = marker._reportSeverity || 'low';
+    if (SEVERITY_PRIORITY[markerSeverity] > SEVERITY_PRIORITY[highest]) {
+      highest = markerSeverity;
+    }
+  });
+  return highest;
+}
+
+function createClusterIcon(cluster) {
+  const childMarkers = cluster.getAllChildMarkers();
+  const severity = getClusterSeverity(childMarkers);
+  const count = cluster.getChildCount();
+
+  return L.divIcon({
+    html: `<div class="severity-cluster severity-${severity}"><span>${count}</span></div>`,
+    className: 'severity-cluster-wrapper',
+    iconSize: L.point(42, 42),
+  });
+}
+
+function hasValidCoordinates(report) {
+  return Number.isFinite(report.lat) && Number.isFinite(report.lng);
+}
+
 export default function MapView() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
+  const markerClusterRef = useRef(null);
   const markersRef = useRef([]);
   const [leafletMap, setLeafletMap] = useState(null);
   const { filteredReports, setActive, activeReport, showHeatmap } = useStore();
@@ -32,18 +65,39 @@ export default function MapView() {
       attribution: '© OpenStreetMap contributors',
     }).addTo(map);
 
+    const clusterLayer = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      spiderfyOnMaxZoom: true,
+      removeOutsideVisibleBounds: true,
+      animate: true,
+      iconCreateFunction: createClusterIcon,
+    });
+    clusterLayer.addTo(map);
+
+    markerClusterRef.current = clusterLayer;
     mapInstance.current = map;
     setLeafletMap(map);
     setTimeout(() => map.invalidateSize(), 100);
+
+    return () => {
+      map.remove();
+      mapInstance.current = null;
+      markerClusterRef.current = null;
+      markersRef.current = [];
+      setLeafletMap(null);
+    };
   }, []);
 
   useEffect(() => {
-    if (!mapInstance.current) return;
+    if (!mapInstance.current || !markerClusterRef.current) return;
 
-    markersRef.current.forEach(m => m.remove());
+    markerClusterRef.current.clearLayers();
     markersRef.current = [];
 
-    filteredReports.forEach(report => {
+    filteredReports
+      .filter(hasValidCoordinates)
+      .forEach(report => {
       const cfg = STATUS_CONFIG[report.status];
       const isActive = report.id === activeReport;
       const size = isActive ? 20 : 14;
@@ -63,7 +117,6 @@ export default function MapView() {
       });
 
       const marker = L.marker([report.lat, report.lng], { icon })
-        .addTo(mapInstance.current)
         .bindPopup(`
           <div style="font-family:sans-serif;min-width:200px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -97,14 +150,20 @@ export default function MapView() {
 
       marker.on('click', () => setActive(report.id));
       marker._reportId = report.id;
+      marker._reportSeverity = report.severity;
       markersRef.current.push(marker);
+      markerClusterRef.current.addLayer(marker);
     });
-  }, [filteredReports]);
+  }, [filteredReports, activeReport, setActive]);
 
   useEffect(() => {
-    if (!activeReport) return;
+    if (!activeReport || !markerClusterRef.current) return;
     const activeMarker = markersRef.current.find(m => m._reportId === activeReport);
-    if (activeMarker) activeMarker.openPopup();
+    if (activeMarker) {
+      markerClusterRef.current.zoomToShowLayer(activeMarker, () => {
+        activeMarker.openPopup();
+      });
+    }
   }, [activeReport]);
 
   return (
